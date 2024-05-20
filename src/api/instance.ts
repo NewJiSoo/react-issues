@@ -2,6 +2,7 @@ import axios, { InternalAxiosRequestConfig, AxiosResponse, AxiosError } from 'ax
 import { jwtDecode } from 'jwt-decode';
 import Cookies from 'js-cookie';
 
+
 // JWT 타입 정의
 interface JwtPayload {
   exp: number;
@@ -18,7 +19,7 @@ interface TokenStorage {
 }
 
 // 쿠키 저장소
-const tokenStorage: TokenStorage = {
+export const tokenStorage: TokenStorage = {
   getAccessToken: () => Cookies.get('accessToken') || null,
   getRefreshToken: () => Cookies.get('refreshToken') || null,
   setAccessToken: (token: string, expiry: number) => {
@@ -34,18 +35,20 @@ const instance = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
+  withCredentials: true,
 });
 const REFRESH_URL = `${instance.defaults.baseURL}/users/token/refresh/`;
 
 
 // 로그인 함수
+// 로그인 시 브라우저 쿠키에 토큰이 저장된다
 export async function login(username: string, password: string): Promise<void> {
   try {
     const response = await instance.post(`/user/login/`, {
       username,
       password
     });
-    console.log(response.data)
+
     const { accessToken, refreshToken } = response.data;
 
     // 토큰 디코딩하여 만료 시간 확인
@@ -59,6 +62,15 @@ export async function login(username: string, password: string): Promise<void> {
   } catch (error) {
     console.error('Login failed', error);
     throw error;
+  }
+}
+
+export const getUserId = () => {
+  const accessToken = tokenStorage.getAccessToken();
+  if (accessToken) {
+    const decodedAccessToken: JwtPayload = jwtDecode(accessToken);
+    const userID = decodedAccessToken.user_id
+    return userID
   }
 }
 
@@ -97,6 +109,7 @@ async function refreshTokenIfNeeded(): Promise<void> {
 }
 
 // Axios 인터셉터 설정
+// 요청을 보내기 전에 호출되며, 요청을 수정하거나 보내기 전에 추가적인 작업을 수행할 수 있다.
 instance.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   await refreshTokenIfNeeded();
   const token = tokenStorage.getAccessToken();
@@ -108,6 +121,7 @@ instance.interceptors.request.use(async (config: InternalAxiosRequestConfig) => 
   return Promise.reject(error);
 });
 
+// 서버로부터 응답을 받은 후 호출되며, 응답을 수정하거나 에러 처리 등의 추가 작업을 수행할 수 있다.
 instance.interceptors.response.use((response: AxiosResponse) => {
   return response;
 }, async (error: AxiosError) => {
@@ -144,7 +158,6 @@ instance.interceptors.response.use((response: AxiosResponse) => {
       }
     }
   }
-
   return Promise.reject(error);
 });
 
